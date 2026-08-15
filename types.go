@@ -2,18 +2,17 @@ package main
 
 import "net/http"
 
-// ProcessResult định nghĩa trạng thái sau khi xử lý một URL
-type ProcessResult string
+type ProcessResult int
 
 const (
-	ResultSuccess ProcessResult = "SUCCESS"
-	ResultSkipped ProcessResult = "SKIPPED"
-	ResultFailed  ProcessResult = "FAILED"
+	ResultSuccess ProcessResult = iota
+	ResultSkipped
+	ResultFailed
 )
 
-// VideoInfo chứa thông tin video bóc tách được từ trang TikTok
 type VideoInfo struct {
-	MP4URL  string
-	Title   string
-	Cookies []*http.Cookie
+	Title       string // Tiêu đề gốc
+	Description string // Mô tả chi tiết (nếu có)
+	MP4URL      string // Link tải video MP4
+	Cookies     []*http.Cookie
 }

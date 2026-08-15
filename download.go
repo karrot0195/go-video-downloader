@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/schollz/progressbar/v3"
@@ -43,9 +44,18 @@ func checkVideoFile(filePath string) (bool, int64, string) {
 }
 
 func downloadVideoWithRequests(mp4URL string, cookies []*http.Cookie, outputFile string, maxRetries int) bool {
+	// Mặc định header theo TikTok; các platform khác (Facebook) truyền referer riêng
+	return downloadVideo(mp4URL, cookies, outputFile, maxRetries, "https://www.tiktok.com/")
+}
+
+// downloadVideo tải video từ mp4URL về outputFile, với referer theo platform
+// (TikTok: https://www.tiktok.com/, Facebook: https://www.facebook.com/)
+func downloadVideo(mp4URL string, cookies []*http.Cookie, outputFile string, maxRetries int, referer string) bool {
 	client := &http.Client{
 		Timeout: DownloadTimeout,
 	}
+
+	origin := strings.TrimSuffix(referer, "/")
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		fmt.Printf("--> Đang tải video (lần %d/%d)...\n", attempt+1, maxRetries)
@@ -57,14 +67,14 @@ func downloadVideoWithRequests(mp4URL string, cookies []*http.Cookie, outputFile
 		}
 
 		req.Header.Set("User-Agent", DefaultUserAgent)
-		req.Header.Set("Referer", "https://www.tiktok.com/")
+		req.Header.Set("Referer", referer)
 		req.Header.Set("Accept", "*/*")
 		req.Header.Set("Accept-Language", "vi-VN,vi;q=0.9,en;q=0.8")
 		req.Header.Set("Range", "bytes=0-")
 		req.Header.Set("Sec-Fetch-Dest", "video")
 		req.Header.Set("Sec-Fetch-Mode", "no-cors")
 		req.Header.Set("Sec-Fetch-Site", "same-site")
-		req.Header.Set("Origin", "https://www.tiktok.com")
+		req.Header.Set("Origin", origin)
 
 		for _, c := range cookies {
 			req.AddCookie(c)

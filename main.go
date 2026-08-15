@@ -6,21 +6,38 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 func main() {
-	mode := flag.String("mode", "file", "Chế độ chạy: 'file' hoặc 'telegram'")
-	inputFile := flag.String("file", "input.txt", "Đường dẫn file input (khi ở mode file)")
-	botToken := flag.String("token", "", "Telegram Bot Token (khi ở mode telegram)")
+	mode := flag.String("mode", "file", "Chế độ: 'file' hoặc 'telegram'")
+	inputFile := flag.String("file", "input.txt", "File danh sách URL")
+	botTokenFlag := flag.String("token", "", "Telegram Bot Token")
 	flag.Parse()
 
+	// Khởi tạo thư mục và nạp lịch sử đã xử lý
 	ensureOutputDir()
 
-	// Khởi tạo Browser dùng chung
+	// (3) Đọc Token: Ưu tiên flag -> biến môi trường TELEGRAM_BOT_TOKEN
+	token := *botTokenFlag
+	if token == "" {
+		token = os.Getenv("TELEGRAM_BOT_TOKEN")
+	}
+
+	var bot *tgbotapi.BotAPI
+	var err error
+	if token != "" {
+		bot, err = tgbotapi.NewBotAPI(token)
+		if err != nil {
+			fmt.Printf("⚠️ Không thể khởi tạo Telegram Bot: %v\n", err)
+			bot = nil
+		}
+	}
+
+	// Khởi tạo Browser
 	path, _ := launcher.LookPath()
 	u := launcher.New().
 		Bin(path).
@@ -33,22 +50,22 @@ func main() {
 	defer browser.MustClose()
 
 	if *mode == "telegram" {
-		if *botToken == "" {
-			fmt.Println("x Vui lòng cung cấp Telegram Bot Token qua tham số -token=YOUR_BOT_TOKEN")
+		if bot == nil {
+			fmt.Println("x Lỗi: Cần cung cấp Bot Token qua flag -token hoặc biến môi trường TELEGRAM_BOT_TOKEN")
 			return
 		}
-		StartTelegramBot(browser, *botToken)
+		StartTelegramBot(browser, bot)
 		return
 	}
 
-	// Chế độ File input mặc định
-	runFileMode(browser, *inputFile)
+	// Chế độ chạy File
+	runFileMode(browser, bot, *inputFile)
 }
 
-func runFileMode(browser *rod.Browser, inputFile string) {
+func runFileMode(browser *rod.Browser, bot *tgbotapi.BotAPI, inputFile string) {
 	file, err := os.Open(inputFile)
 	if err != nil {
-		fmt.Printf("x Không tìm thấy file %s.\n", inputFile)
+		fmt.Printf("x Không tìm thấy file %s\n", inputFile)
 		return
 	}
 	defer file.Close()
@@ -62,54 +79,20 @@ func runFileMode(browser *rod.Browser, inputFile string) {
 		}
 	}
 
-	totalURLs := len(urls)
-	if totalURLs == 0 {
-		fmt.Printf("x File %s trống.\n", inputFile)
-		return
-	}
+	for i, videoURL := range urls {
+		var outputFile string
+		var res ProcessResult
 
-	os.Remove(FailedFile)
+		// Phân loại platform rồi gọi scraper tương ứng
+		if isFacebookURL(videoURL) {
+			outputFile, _, res = processFacebookURLWithFile(browser, videoURL, i+1, len(urls))
+		} else {
+			outputFile, _, res = processTikTokURLWithFile(browser, videoURL, i+1, len(urls))
+		}
 
-	fmt.Printf("--> Tìm thấy %d link trong file %s\n", totalURLs, inputFile)
-	fmt.Printf("--> Thư mục lưu video: %s/\n", OutputDir)
-	fmt.Println("--> Bắt đầu xử lý...\n")
-
-	var successCount, skippedCount, failedCount int
-
-	for i, tiktokURL := range urls {
-		res := processTikTokURL(browser, tiktokURL, i+1, totalURLs)
-
-		switch res {
-		case ResultSkipped:
-			skippedCount++
-		case ResultSuccess:
-			successCount++
-		default:
-			fmt.Printf("⚠️ Thử lại lần 2 cho URL: %s\n", tiktokURL)
-			time.Sleep(3 * time.Second)
-			resRetry := processTikTokURL(browser, tiktokURL, i+1, totalURLs)
-
-			switch resRetry {
-			case ResultSkipped:
-				skippedCount++
-			case ResultSuccess:
-				successCount++
-			default:
-				failedCount++
-				fmt.Printf("x Ghi nhận URL thất bại vào file %s\n", FailedFile)
-				logFailedURL(tiktokURL)
-			}
+		// Nếu tải thành công và có bot Telegram -> Gửi file (nếu cần)
+		if (res == ResultSuccess || res == ResultSkipped) && bot != nil && outputFile != "" {
+			// sendVideoToTelegram(bot, targetChatID, outputFile, info)
 		}
 	}
-
-	fmt.Println("\n" + strings.Repeat("=", 50))
-	fmt.Println("✓ HOÀN THÀNH!")
-	fmt.Printf("📁 Thư mục lưu video: %s/\n", OutputDir)
-	fmt.Printf("✅ Thành công: %d\n", successCount)
-	fmt.Printf("⏭️ Bỏ qua (đã tải): %d\n", skippedCount)
-	fmt.Printf("❌ Thất bại: %d\n", failedCount)
-	if failedCount > 0 {
-		fmt.Printf("📝 Danh sách URL thất bại đã được ghi vào: %s\n", FailedFile)
-	}
-	fmt.Println(strings.Repeat("=", 50))
 }
