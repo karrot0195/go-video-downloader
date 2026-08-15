@@ -49,7 +49,7 @@ func getVideoInfoFromTikTok(browser *rod.Browser, tiktokURL string) *VideoInfo {
 
 		if isValidVideoURL(urlStr, contentType) && info.MP4URL == "" {
 			info.MP4URL = urlStr
-			fmt.Println("--> Đã bắt được link video")
+			fmt.Println("--> Captured video link: " + urlStr)
 		}
 	})()
 
@@ -60,7 +60,7 @@ func getVideoInfoFromTikTok(browser *rod.Browser, tiktokURL string) *VideoInfo {
 	})
 
 	if err != nil {
-		fmt.Printf("x Lỗi khi load trang: %v\n", err)
+		fmt.Printf("x Error loading page: %v\n", err)
 		return nil
 	}
 
@@ -72,7 +72,7 @@ func getVideoInfoFromTikTok(browser *rod.Browser, tiktokURL string) *VideoInfo {
 		})
 	}
 
-	// Lấy Title và Description từ trang web
+	// Get Title and Description from the webpage
 	if el, err := page.Element("article"); err == nil {
 		text, _ := el.Text()
 		lines := strings.Split(strings.TrimSpace(text), "\n")
@@ -86,7 +86,7 @@ func getVideoInfoFromTikTok(browser *rod.Browser, tiktokURL string) *VideoInfo {
 		info.Title = strings.TrimSpace(pageInfo.Title)
 	}
 
-	fmt.Printf("--> Tiêu đề: %s\n", info.Title)
+	fmt.Printf("--> Title: %s\n", info.Title)
 
 	if info.MP4URL == "" {
 		time.Sleep(2 * time.Second)
@@ -95,29 +95,29 @@ func getVideoInfoFromTikTok(browser *rod.Browser, tiktokURL string) *VideoInfo {
 	return info
 }
 
-// processTikTokURLWithFile trả về đường dẫn file, thông tin video và kết quả
-func processTikTokURLWithFile(browser *rod.Browser, tiktokURL string, index, total int) (string, *VideoInfo, ProcessResult) {
+// processTikTokURLWithFile returns file path, video info, and result status
+func processTikTokURLWithFile(browser *rod.Browser, tiktokURL string, index, total int, watermarkName string) (string, *VideoInfo, ProcessResult) {
 	fmt.Println("\n" + strings.Repeat("=", 50))
-	fmt.Printf("[%d/%d] Đang xử lý: %s\n", index, total, tiktokURL)
+	fmt.Printf("[%d/%d] Processing: %s\n", index, total, tiktokURL)
 	fmt.Println(strings.Repeat("=", 50))
 
 	info := getVideoInfoFromTikTok(browser, tiktokURL)
 	if info == nil || info.MP4URL == "" {
-		fmt.Println("x Không tìm thấy link video")
+		fmt.Println("x No video link found")
 		return "", nil, ResultFailed
 	}
 
-	// show info video in a line
+	// Show video info in one line
 	fmt.Printf("VideoInfo: %v\n", info)
 
-	// Tên file lưu trên ổ cứng vẫn slugify để tránh ký tự đặc biệt
+	// Filename saved to disk is still slugified to avoid special characters
 	safeFilename := slugify(info.Title)
 	if safeFilename == "" {
 		safeFilename = "tiktok_video"
 	}
 	filename := fmt.Sprintf("%s.mp4", safeFilename)
 
-	// Nối videoId vào tên file để tránh trùng tên
+	// Append videoId to filename to avoid duplicates
 	if videoID := extractVideoID(tiktokURL); videoID != "" {
 		filename = fmt.Sprintf("%s_%s.mp4", safeFilename, videoID)
 	}
@@ -126,7 +126,7 @@ func processTikTokURLWithFile(browser *rod.Browser, tiktokURL string, index, tot
 	// if _, err := os.Stat(outputFile); err == nil {
 	// 	isValid, fileSize, _ := checkVideoFile(outputFile)
 	// 	if isValid {
-	// 		fmt.Printf("--> File '%s' đã tồn tại và hợp lệ (%.2f MB)\n", filename, float64(fileSize)/1024/1024)
+	// 		fmt.Printf("--> File '%s' already exists and is valid (%.2f MB)\n", filename, float64(fileSize)/1024/1024)
 	// 		return outputFile, info, ResultSkipped
 	// 	}
 	// 	os.Remove(outputFile)
@@ -134,17 +134,17 @@ func processTikTokURLWithFile(browser *rod.Browser, tiktokURL string, index, tot
 
 	success := downloadVideoWithRequests(info.MP4URL, info.Cookies, outputFile, 3)
 	if success {
-		fmt.Printf("--> Đang xử lý video (720p + cắt viền + watermark)...\n")
-		if err := postProcessVideo(outputFile); err != nil {
-			fmt.Printf("⚠️ Không thể xử lý video: %v\n", err)
-			fmt.Println("   (File gốc vẫn được giữ nguyên)")
+		fmt.Printf("--> Processing video (720p + crop + watermark)...\n")
+		if err := postProcessVideo(outputFile, watermarkName); err != nil {
+			fmt.Printf("⚠️ Cannot process video: %v\n", err)
+			fmt.Println("   (Original file kept unchanged)")
 		} else {
-			fmt.Printf("✓ Đã xử lý xong (720p + watermark)\n")
+			fmt.Printf("✓ Processing complete (720p + watermark)\n")
 		}
-		fmt.Printf("✓ Hoàn tất [%d/%d]: %s\n", index, total, filename)
+		fmt.Printf("✓ Completed [%d/%d]: %s\n", index, total, filename)
 		return outputFile, info, ResultSuccess
 	}
 
-	fmt.Printf("x Thất bại [%d/%d]: %s\n", index, total, tiktokURL)
+	fmt.Printf("x Failed [%d/%d]: %s\n", index, total, tiktokURL)
 	return "", nil, ResultFailed
 }

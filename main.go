@@ -13,15 +13,16 @@ import (
 )
 
 func main() {
-	mode := flag.String("mode", "file", "Chế độ: 'file' hoặc 'telegram'")
-	inputFile := flag.String("file", "input.txt", "File danh sách URL")
+	mode := flag.String("mode", "file", "Mode: 'file' or 'telegram'")
+	inputFile := flag.String("file", "input.txt", "URL list file")
 	botTokenFlag := flag.String("token", "", "Telegram Bot Token")
+	watermarkName := flag.String("watermark", "Chuyen Co Huong", "Watermark name")
 	flag.Parse()
 
-	// Khởi tạo thư mục và nạp lịch sử đã xử lý
+	// Initialize directories and load processed history
 	ensureOutputDir()
 
-	// (3) Đọc Token: Ưu tiên flag -> biến môi trường TELEGRAM_BOT_TOKEN
+	// (3) Read Token: Priority flag -> TELEGRAM_BOT_TOKEN environment variable
 	token := *botTokenFlag
 	if token == "" {
 		token = os.Getenv("TELEGRAM_BOT_TOKEN")
@@ -32,12 +33,12 @@ func main() {
 	if token != "" {
 		bot, err = tgbotapi.NewBotAPI(token)
 		if err != nil {
-			fmt.Printf("⚠️ Không thể khởi tạo Telegram Bot: %v\n", err)
+			fmt.Printf("⚠️ Cannot initialize Telegram Bot: %v\n", err)
 			bot = nil
 		}
 	}
 
-	// Khởi tạo Browser
+	// Initialize Browser
 	path, _ := launcher.LookPath()
 	u := launcher.New().
 		Bin(path).
@@ -51,21 +52,21 @@ func main() {
 
 	if *mode == "telegram" {
 		if bot == nil {
-			fmt.Println("x Lỗi: Cần cung cấp Bot Token qua flag -token hoặc biến môi trường TELEGRAM_BOT_TOKEN")
+			fmt.Println("x Error: Bot Token required via -token flag or TELEGRAM_BOT_TOKEN environment variable")
 			return
 		}
-		StartTelegramBot(browser, bot)
+		StartTelegramBot(browser, bot, *watermarkName)
 		return
 	}
 
-	// Chế độ chạy File
-	runFileMode(browser, bot, *inputFile)
+	// File mode execution
+	runFileMode(browser, bot, *inputFile, *watermarkName)
 }
 
-func runFileMode(browser *rod.Browser, bot *tgbotapi.BotAPI, inputFile string) {
+func runFileMode(browser *rod.Browser, bot *tgbotapi.BotAPI, inputFile string, watermarkName string) {
 	file, err := os.Open(inputFile)
 	if err != nil {
-		fmt.Printf("x Không tìm thấy file %s\n", inputFile)
+		fmt.Printf("x File not found: %s\n", inputFile)
 		return
 	}
 	defer file.Close()
@@ -83,14 +84,14 @@ func runFileMode(browser *rod.Browser, bot *tgbotapi.BotAPI, inputFile string) {
 		var outputFile string
 		var res ProcessResult
 
-		// Phân loại platform rồi gọi scraper tương ứng
+		// Detect platform and call appropriate scraper
 		if isFacebookURL(videoURL) {
-			outputFile, _, res = processFacebookURLWithFile(browser, videoURL, i+1, len(urls))
+			outputFile, _, res = processFacebookURLWithFile(browser, videoURL, i+1, len(urls), watermarkName)
 		} else {
-			outputFile, _, res = processTikTokURLWithFile(browser, videoURL, i+1, len(urls))
+			outputFile, _, res = processTikTokURLWithFile(browser, videoURL, i+1, len(urls), watermarkName)
 		}
 
-		// Nếu tải thành công và có bot Telegram -> Gửi file (nếu cần)
+		// If download successful and Telegram bot exists -> Send file (if needed)
 		if (res == ResultSuccess || res == ResultSkipped) && bot != nil && outputFile != "" {
 			// sendVideoToTelegram(bot, targetChatID, outputFile, info)
 		}

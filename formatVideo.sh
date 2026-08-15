@@ -10,25 +10,25 @@ if [[ -z "$INPUT" ]]; then
 fi
 
 if [[ ! -f "$INPUT" ]]; then
-    echo "❌ Không tìm thấy file: $INPUT"
+    echo "❌ File not found: $INPUT"
     exit 1
 fi
 
 OUTPUT="${2:-${INPUT%.*}_covered.mp4}"
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
-    echo "❌ Chưa cài ffmpeg"
+    echo "❌ ffmpeg not installed"
     echo "sudo dnf install ffmpeg"
     exit 1
 fi
 
 if ! command -v ffprobe >/dev/null 2>&1; then
-    echo "❌ Chưa có ffprobe"
+    echo "❌ ffprobe not found"
     echo "sudo dnf install ffmpeg"
     exit 1
 fi
 
-# Lấy kích thước video
+# Get video dimensions
 IFS=x read -r WIDTH HEIGHT < <(
     ffprobe -v error \
         -select_streams v:0 \
@@ -45,14 +45,14 @@ echo "Output : $OUTPUT"
 echo "================================"
 echo
 
-read -p "X (ngang): " X
-read -p "Y (dọc):   " Y
-read -p "Width:     " W
-read -p "Height:    " H
+read -p "X (horizontal): " X
+read -p "Y (vertical):   " Y
+read -p "Width:          " W
+read -p "Height:         " H
 
 echo
-read -p "Bắt đầu (giây, mặc định 0): " START
-read -p "Kết thúc (Enter = hết video): " END
+read -p "Start time (seconds, default 0): " START
+read -p "End time (Enter for full video): " END
 
 START="${START:-0}"
 
@@ -63,7 +63,7 @@ else
 fi
 
 echo
-echo "Đang xử lý..."
+echo "Processing..."
 echo "Box: x=$X y=$Y w=$W h=$H"
 echo "Time: $START -> ${END:-END}"
 echo
@@ -77,5 +77,5 @@ ffmpeg -hide_banner -i "$INPUT" \
     -y "$OUTPUT"
 
 echo
-echo "✅ Xong!"
+echo "✅ Done!"
 echo "📁 $OUTPUT"

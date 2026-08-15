@@ -20,7 +20,7 @@ type fbCandidate struct {
 	size        int64
 }
 
-// fbHeader lấy giá trị header không phân biệt hoa thường từ map header của CDP
+// fbHeader gets header value case-insensitively from CDP header map
 func fbHeader(headers proto.NetworkHeaders, key string) string {
 	for k, v := range headers {
 		if strings.EqualFold(k, key) {
@@ -40,8 +40,8 @@ func fbHeaderInt(headers proto.NetworkHeaders, key string) int64 {
 	return n
 }
 
-// isValidFacebookVideoURL nhận diện request tải video CDN của Facebook
-// trong network traffic của trang (video.xx.fbcdn.net, scontent...fna.fbcdn.net, video.fbsbx.com)
+// isValidFacebookVideoURL identifies CDN video requests from Facebook
+// in page network traffic (video.xx.fbcdn.net, scontent...fna.fbcdn.net, video.fbsbx.com)
 func isValidFacebookVideoURL(videoURL, contentType string) bool {
 	if strings.Contains(contentType, "video/") {
 		return true
@@ -56,7 +56,7 @@ func isValidFacebookVideoURL(videoURL, contentType string) bool {
 	return false
 }
 
-// isUsableFacebookVideoURL kiểm tra URL có phải link media trực tiếp dùng được không
+// isUsableFacebookVideoURL checks if URL is a usable direct media link
 func isUsableFacebookVideoURL(videoURL string) bool {
 	if videoURL == "" ||
 		strings.HasPrefix(videoURL, "blob:") ||
@@ -69,13 +69,13 @@ func isUsableFacebookVideoURL(videoURL string) bool {
 		strings.HasSuffix(videoURL, ".mp4")
 }
 
-// unescapeFBURL gỡ escape JSON của Facebook (\/, \u0026, \u00253D, ...) trong URL
+// unescapeFBURL unescapes Facebook JSON escapes (\/, \u0026, \u00253D, etc.) in URL
 func unescapeFBURL(s string) string {
-	// JSON string cũng là Go string hợp lệ -> dùng strconv.Unquote để giải mã chuẩn
+	// JSON string is also a valid Go string -> use strconv.Unquote for standard decoding
 	if unquoted, err := strconv.Unquote(`"` + s + `"`); err == nil {
 		return unquoted
 	}
-	// Fallback thủ công cho các escape phổ biến
+	// Fallback manual for common escapes
 	s = strings.ReplaceAll(s, `\/`, "/")
 	s = strings.ReplaceAll(s, `\u0026`, "&")
 	s = strings.ReplaceAll(s, `\u003d`, "=")
@@ -90,8 +90,8 @@ func unescapeFBURL(s string) string {
 	return s
 }
 
-// extractVideoURLsFromHTML quét HTML trang để tìm link video trực tiếp.
-// Các key JSON của Facebook (ưu tiên chất lượng HD trước):
+// extractVideoURLsFromHTML scans HTML page to find direct video links.
+// Facebook JSON keys (priority to HD quality):
 //   - browser_native_hd_url / browser_native_sd_url
 //   - hd_src / sd_src
 //   - playable_url_quality_hd / playable_url
@@ -119,9 +119,9 @@ func extractVideoURLsFromHTML(htmlStr string) []string {
 	return urls
 }
 
-// getVideoInfoFromFacebook mở trang Facebook Reel/Video, bắt link MP4
-// từ network traffic; nếu không bắt được thì fallback sang <video> tag,
-// og:video meta và JSON nhúng trong HTML.
+// getVideoInfoFromFacebook opens Facebook Reel/Video page, captures MP4 link
+// from network traffic; if not captured, falls back to <video> tag,
+// og:video meta, and embedded JSON in HTML.
 func getVideoInfoFromFacebook(browser *rod.Browser, fbURL string) *VideoInfo {
 	info := &VideoInfo{
 		Title: "Facebook Video",
@@ -130,7 +130,7 @@ func getVideoInfoFromFacebook(browser *rod.Browser, fbURL string) *VideoInfo {
 	page := browser.MustPage()
 	defer page.MustClose()
 
-	// Dùng desktop (reels hiển thị được trên web desktop)
+	// Use desktop (reels are viewable on desktop web)
 	page.MustEmulate(devices.LaptopWithMDPIScreen)
 
 	page.MustEvalOnNewDocument(`
@@ -139,7 +139,7 @@ func getVideoInfoFromFacebook(browser *rod.Browser, fbURL string) *VideoInfo {
 		});
 	`)
 
-	// Bắt các response chứa video CDN của Facebook
+	// Capture responses containing Facebook CDN videos
 	var candidatesMu sync.Mutex
 	candidates := make(map[string]fbCandidate)
 
@@ -170,10 +170,10 @@ func getVideoInfoFromFacebook(browser *rod.Browser, fbURL string) *VideoInfo {
 	})
 
 	if err != nil {
-		fmt.Printf("x Lỗi khi load trang: %v\n", err)
+		fmt.Printf("x Error loading page: %v\n", err)
 	} else {
-		// Chờ player (thẻ <video>) xuất hiện tối đa 20s để video bắt đầu tải.
-		// Dùng polling thay vì MustWait để tránh panic khi trang đang điều hướng.
+		// Wait for player (<video> tag) to appear for up to 20s for video to start loading.
+		// Use polling instead of MustWait to avoid panic when page is navigating.
 		deadline := time.Now().Add(20 * time.Second)
 		for time.Now().Before(deadline) {
 			res, evalErr := page.Eval(`!!(document && document.querySelector('video'))`)
@@ -185,7 +185,7 @@ func getVideoInfoFromFacebook(browser *rod.Browser, fbURL string) *VideoInfo {
 		time.Sleep(2 * time.Second)
 	}
 
-	// 1. Chọn URL từ network candidates: ưu tiên content-type video, rồi dung lượng lớn nhất
+	// 1. Select URL from network candidates: prioritize video content-type, then largest size
 	candidatesMu.Lock()
 	var best *fbCandidate
 	for _, c := range candidates {
@@ -210,10 +210,10 @@ func getVideoInfoFromFacebook(browser *rod.Browser, fbURL string) *VideoInfo {
 
 	if best != nil {
 		info.MP4URL = best.url
-		fmt.Printf("--> Đã bắt được link video từ network (%.1f MB)\n", float64(best.size)/1024/1024)
+		fmt.Printf("--> Captured video link from network (%.1f MB)\n", float64(best.size)/1024/1024)
 	}
 
-	// 2. Fallback: đọc src trực tiếp từ các thẻ <video> trên trang
+	// 2. Fallback: read src directly from <video> tags on page
 	if info.MP4URL == "" {
 		if res, err := page.Eval(`() => {
 			const srcs = [];
@@ -227,25 +227,25 @@ func getVideoInfoFromFacebook(browser *rod.Browser, fbURL string) *VideoInfo {
 				s := item.Str()
 				if isUsableFacebookVideoURL(s) {
 					info.MP4URL = s
-					fmt.Println("--> Đã lấy link video từ thẻ <video>")
+					fmt.Println("--> Got video link from <video> tag")
 					break
 				}
 			}
 		}
 	}
 
-	// 3. Fallback: quét JSON nhúng trong HTML (browser_native / hd_src / sd_src / playable_url)
+	// 3. Fallback: scan embedded JSON in HTML (browser_native / hd_src / sd_src / playable_url)
 	if info.MP4URL == "" {
 		if htmlStr, err := page.HTML(); err == nil {
 			urls := extractVideoURLsFromHTML(htmlStr)
 			if len(urls) > 0 {
 				info.MP4URL = urls[0]
-				fmt.Println("--> Đã lấy link video từ JSON nhúng trong HTML")
+				fmt.Println("--> Got video link from embedded JSON in HTML")
 			}
 		}
 	}
 
-	// 4. Fallback cuối: meta og:video
+	// 4. Final fallback: og:video meta
 	if info.MP4URL == "" {
 		if res, err := page.Eval(`() => {
 			const g = (sel) => {
@@ -257,12 +257,12 @@ func getVideoInfoFromFacebook(browser *rod.Browser, fbURL string) *VideoInfo {
 			s := res.Value.Str()
 			if isUsableFacebookVideoURL(s) {
 				info.MP4URL = s
-				fmt.Println("--> Đã lấy link video từ meta og:video")
+				fmt.Println("--> Got video link from og:video meta")
 			}
 		}
 	}
 
-	// Lấy cookies từ trang (cần thiết để tải video CDN)
+	// Get cookies from page (needed for CDN video download)
 	rodCookies := page.MustCookies()
 	for _, c := range rodCookies {
 		info.Cookies = append(info.Cookies, &http.Cookie{
@@ -271,7 +271,7 @@ func getVideoInfoFromFacebook(browser *rod.Browser, fbURL string) *VideoInfo {
 		})
 	}
 
-	// Lấy tiêu đề + mô tả từ meta og
+	// Get title + description from og meta
 	if res, err := page.Eval(`() => {
 		const g = (sel) => {
 			const el = document.querySelector(sel);
@@ -290,33 +290,33 @@ func getVideoInfoFromFacebook(browser *rod.Browser, fbURL string) *VideoInfo {
 		}
 	}
 
-	fmt.Printf("--> Tiêu đề: %s\n", info.Title)
+	fmt.Printf("--> Title: %s\n", info.Title)
 
 	return info
 }
 
-// processFacebookURLWithFile xử lý 1 URL Facebook: lấy link video -> tải -> xử lý hậu kỳ
-func processFacebookURLWithFile(browser *rod.Browser, fbURL string, index, total int) (string, *VideoInfo, ProcessResult) {
+// processFacebookURLWithFile processes 1 Facebook URL: get video link -> download -> post-processing
+func processFacebookURLWithFile(browser *rod.Browser, fbURL string, index, total int, watermarkName string) (string, *VideoInfo, ProcessResult) {
 	fmt.Println("\n" + strings.Repeat("=", 50))
-	fmt.Printf("[%d/%d] Đang xử lý: %s\n", index, total, fbURL)
+	fmt.Printf("[%d/%d] Processing: %s\n", index, total, fbURL)
 	fmt.Println(strings.Repeat("=", 50))
 
 	info := getVideoInfoFromFacebook(browser, fbURL)
 	if info == nil || info.MP4URL == "" {
-		fmt.Println("x Không tìm thấy link video")
+		fmt.Println("x No video link found")
 		return "", nil, ResultFailed
 	}
 
 	fmt.Printf("VideoInfo: %v\n", info)
 
-	// Tên file lưu trên ổ cứng vẫn slugify để tránh ký tự đặc biệt
+	// Filename saved to disk is still slugified to avoid special characters
 	safeFilename := slugify(info.Title)
 	if safeFilename == "" || safeFilename == "tiktok_video" {
 		safeFilename = "facebook_video"
 	}
 	filename := fmt.Sprintf("%s.mp4", safeFilename)
 
-	// Nối videoId vào tên file để tránh trùng tên
+	// Append videoId to filename to avoid duplicates
 	if videoID := extractFacebookVideoID(fbURL); videoID != "" {
 		filename = fmt.Sprintf("%s_%s.mp4", safeFilename, videoID)
 	}
@@ -324,17 +324,17 @@ func processFacebookURLWithFile(browser *rod.Browser, fbURL string, index, total
 
 	success := downloadVideo(info.MP4URL, info.Cookies, outputFile, 3, "https://www.facebook.com/")
 	if success {
-		fmt.Printf("--> Đang xử lý video (720p + cắt viền + watermark)...\n")
-		if err := postProcessVideo(outputFile); err != nil {
-			fmt.Printf("⚠️ Không thể xử lý video: %v\n", err)
-			fmt.Println("   (File gốc vẫn được giữ nguyên)")
+		fmt.Printf("--> Processing video (720p + crop + watermark)...\n")
+		if err := postProcessVideo(outputFile, watermarkName); err != nil {
+			fmt.Printf("⚠️ Cannot process video: %v\n", err)
+			fmt.Println("   (Original file kept unchanged)")
 		} else {
-			fmt.Printf("✓ Đã xử lý xong (720p + watermark)\n")
+			fmt.Printf("✓ Processing complete (720p + watermark)\n")
 		}
-		fmt.Printf("✓ Hoàn tất [%d/%d]: %s\n", index, total, filename)
+		fmt.Printf("✓ Completed [%d/%d]: %s\n", index, total, filename)
 		return outputFile, info, ResultSuccess
 	}
 
-	fmt.Printf("x Thất bại [%d/%d]: %s\n", index, total, fbURL)
+	fmt.Printf("x Failed [%d/%d]: %s\n", index, total, fbURL)
 	return "", nil, ResultFailed
 }

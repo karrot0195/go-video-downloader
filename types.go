@@ -11,8 +11,8 @@ const (
 )
 
 type VideoInfo struct {
-	Title       string // Tiêu đề gốc
-	Description string // Mô tả chi tiết (nếu có)
-	MP4URL      string // Link tải video MP4
+	Title       string // Original title
+	Description string // Detailed description (if available)
+	MP4URL      string // MP4 video download link
 	Cookies     []*http.Cookie
 }

@@ -20,7 +20,7 @@ func ensureOutputDir() error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("--> Đã tạo thư mục: %s\n", OutputDir)
+		fmt.Printf("--> Created directory: %s\n", OutputDir)
 	}
 	return nil
 }
@@ -35,7 +35,7 @@ func slugify(text string) string {
 	text = strings.ReplaceAll(text, "đ", "d")
 	text = strings.ReplaceAll(text, "Đ", "D")
 
-	// Loại bỏ dấu tiếng Việt (Unicode NFD)
+	// Remove Vietnamese diacritics (Unicode NFD)
 	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
 	result, _, err := transform.String(t, text)
 	if err != nil {
@@ -58,7 +58,7 @@ func slugify(text string) string {
 	return result
 }
 
-// extractVideoID trích xuất videoId từ URL TikTok, ví dụ:
+// extractVideoID extracts videoId from TikTok URL, e.g.:
 // https://www.tiktok.com/@hacaoaudio/video/7672310445612535058?_r=1
 // -> 7672310445612535058
 func extractVideoID(tiktokURL string) string {
@@ -70,7 +70,7 @@ func extractVideoID(tiktokURL string) string {
 	return ""
 }
 
-// hostMatches kiểm tra hostname của URL có khớp đúng domain (hoặc subdomain) không
+// hostMatches checks if URL hostname matches the domain (or subdomain)
 func hostMatches(rawURL, domain string) bool {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
@@ -80,30 +80,30 @@ func hostMatches(rawURL, domain string) bool {
 	return h == domain || strings.HasSuffix(h, "."+domain)
 }
 
-// isTikTokURL kiểm tra URL có thuộc TikTok không
+// isTikTokURL checks if URL belongs to TikTok
 func isTikTokURL(rawURL string) bool {
 	return hostMatches(rawURL, "tiktok.com")
 }
 
-// isFacebookURL kiểm tra URL có thuộc Facebook không
-// (bao gồm cả link rút gọn fb.watch)
+// isFacebookURL checks if URL belongs to Facebook
+// (including shortened fb.watch links)
 func isFacebookURL(rawURL string) bool {
 	return hostMatches(rawURL, "facebook.com") ||
 		hostMatches(rawURL, "fb.watch") ||
 		hostMatches(rawURL, "fb.com")
 }
 
-// isSupportedVideoURL kiểm tra URL có thuộc platform được hỗ trợ không
+// isSupportedVideoURL checks if URL belongs to a supported platform
 func isSupportedVideoURL(rawURL string) bool {
 	return isTikTokURL(rawURL) || isFacebookURL(rawURL)
 }
 
-// extractFacebookVideoID trích xuất ID video từ URL Facebook, ví dụ:
+// extractFacebookVideoID extracts video ID from Facebook URL, e.g.:
 // https://www.facebook.com/share/v/1Q2g4xhfGh/?mibextid=wwXIfr -> 1Q2g4xhfGh
 // https://www.facebook.com/reel/123456789/                        -> 123456789
 // https://www.facebook.com/user/videos/987654321/                 -> 987654321
 func extractFacebookVideoID(fbURL string) string {
-	// Bỏ query string và fragment
+	// Remove query string and fragment
 	clean := strings.SplitN(fbURL, "?", 2)[0]
 	clean = strings.SplitN(clean, "#", 2)[0]
 	clean = strings.TrimRight(clean, "/")
@@ -126,14 +126,14 @@ func logFailedURL(url string) {
 	f.WriteString(url + "\n")
 }
 
-// extractVideoURLs trích xuất tất cả URL video được hỗ trợ
-// (TikTok + Facebook) từ một đoạn text (tin nhắn Telegram, file, ...)
+// extractVideoURLs extracts all supported video URLs
+// (TikTok + Facebook) from a text (Telegram message, file, etc.)
 func extractVideoURLs(text string) []string {
-	// 1. Thay thế tất cả dấu phẩy, xuống dòng, tab thành khoảng trắng
+	// 1. Replace all commas, newlines, tabs with spaces
 	replacer := strings.NewReplacer(",", " ", "\n", " ", "\r", " ", "\t", " ")
 	cleanedText := replacer.Replace(text)
 
-	// 2. Tìm tất cả chuỗi dạng URL
+	// 2. Find all URL-like strings
 	urlRegex := regexp.MustCompile(`https?://[^\s]+`)
 	rawURLs := urlRegex.FindAllString(cleanedText, -1)
 
@@ -141,10 +141,10 @@ func extractVideoURLs(text string) []string {
 	seen := make(map[string]bool)
 
 	for _, u := range rawURLs {
-		// Làm sạch các ký tự rác hoặc dấu câu dính ở 2 đầu URL
+		// Clean trailing garbage or punctuation from both ends of URL
 		cleanURL := strings.Trim(u, `"',.;()[]{} `)
 
-		// Chỉ lấy URL thuộc platform được hỗ trợ và chưa bị trùng
+		// Only keep URLs from supported platforms and avoid duplicates
 		if isSupportedVideoURL(cleanURL) && !seen[cleanURL] {
 			seen[cleanURL] = true
 			urls = append(urls, cleanURL)

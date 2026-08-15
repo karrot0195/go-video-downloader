@@ -9,9 +9,9 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func StartTelegramBot(browser *rod.Browser, bot *tgbotapi.BotAPI) {
-	fmt.Printf("✓ Đã kết nối Telegram Bot: @%s\n", bot.Self.UserName)
-	fmt.Println("--> Đang quét tin nhắn mới ...")
+func StartTelegramBot(browser *rod.Browser, bot *tgbotapi.BotAPI, watermarkName string) {
+	fmt.Printf("✓ Connected to Telegram Bot: @%s\n", bot.Self.UserName)
+	fmt.Println("--> Scanning for new messages ...")
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -32,7 +32,7 @@ func StartTelegramBot(browser *rod.Browser, bot *tgbotapi.BotAPI) {
 			continue
 		}
 
-		// Trích xuất các URL video (TikTok + Facebook) từ tin nhắn
+		// Extract video URLs (TikTok + Facebook) from message
 		urls := extractVideoURLs(text)
 		if len(urls) == 0 {
 			continue
@@ -43,28 +43,28 @@ func StartTelegramBot(browser *rod.Browser, bot *tgbotapi.BotAPI) {
 			var outputFile string
 			var res ProcessResult
 
-			// Phân loại platform rồi gọi scraper tương ứng
+			// Detect platform and call appropriate scraper
 			if isFacebookURL(videoURL) {
-				outputFile, _, res = processFacebookURLWithFile(browser, videoURL, i+1, len(urls))
+				outputFile, _, res = processFacebookURLWithFile(browser, videoURL, i+1, len(urls), watermarkName)
 			} else {
-				outputFile, _, res = processTikTokURLWithFile(browser, videoURL, i+1, len(urls))
+				outputFile, _, res = processTikTokURLWithFile(browser, videoURL, i+1, len(urls), watermarkName)
 			}
 
 			if res == ResultSuccess || res == ResultSkipped {
-				// Gửi video về Telegram
+				// Send video to Telegram
 				// sendVideoToTelegram(bot, chatID, outputFile, info)
-				fmt.Printf("File saved into %s\n", outputFile)
+				fmt.Printf("File saved to: %s\n", outputFile)
 			}
 		}
 	}
 }
 
-// sendVideoToTelegram hỗ trợ Kiểm tra dung lượng 50MB, Retry 3 lần và Fallback gửi Link
+// sendVideoToTelegram supports 50MB size check, 3 retries, and fallback link sending
 func sendVideoToTelegram(bot *tgbotapi.BotAPI, chatID int64, filePath string, info *VideoInfo) {
 	if bot == nil || info == nil {
 		return
 	}
-	// 1. Định dạng Caption
+	// 1. Format Caption
 	caption := info.Title
 	if info.Description != "" {
 		caption = fmt.Sprintf("%s\n\n%s", info.Title, info.Description)
@@ -75,44 +75,44 @@ func sendVideoToTelegram(bot *tgbotapi.BotAPI, chatID int64, filePath string, in
 		caption = string(runes[:997]) + "..."
 	}
 
-	// 3. Cơ chế Retry gửi file tối đa 3 lần
+	// 3. Retry mechanism for sending file (max 3 attempts)
 	maxRetries := 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		fmt.Printf("--> Đang gửi video về Telegram (Lần %d/%d)...\n", attempt, maxRetries)
+		fmt.Printf("--> Sending video to Telegram (Attempt %d/%d)...\n", attempt, maxRetries)
 		video := tgbotapi.NewVideo(chatID, tgbotapi.FilePath(filePath))
 		video.Caption = caption
 
 		_, err := bot.Send(video)
 		if err == nil {
-			fmt.Println("✓ Đã gửi video thành công!")
+			fmt.Println("✓ Video sent successfully!")
 			return
 		}
 
-		fmt.Printf("⚠️ Lỗi gửi video lần %d: %v\n", attempt, err)
+		fmt.Printf("⚠️ Error sending video attempt %d: %v\n", attempt, err)
 		if attempt < maxRetries {
 			waitTime := time.Duration(attempt*2) * time.Second
-			fmt.Printf("--> Chờ %v trước khi thử lại...\n", waitTime)
+			fmt.Printf("--> Waiting %v before retrying...\n", waitTime)
 			time.Sleep(waitTime)
 		}
 	}
 
-	// 4. Nếu sau 3 lần thử gửi file MP4 vẫn lỗi -> Gửi tin nhắn text dự phòng kèm link MP4
-	fmt.Println("x Tải file MP4 lên Telegram thất bại sau 3 lần thử. Gửi link dự phòng...")
+	// 4. If after 3 attempts MP4 upload still fails -> Send fallback text message with MP4 link
+	fmt.Println("x Uploading MP4 to Telegram failed after 3 attempts. Sending fallback link...")
 	sendFallbackText(bot, chatID, caption, info.MP4URL)
 }
 
-// sendFallbackText gửi tin nhắn chữ kèm Link MP4 khi không thể upload file
+// sendFallbackText sends text message with MP4 Link when file upload fails
 func sendFallbackText(bot *tgbotapi.BotAPI, chatID int64, caption string, mp4URL string) {
 	msgText := caption
 	if mp4URL != "" {
-		msgText = fmt.Sprintf("%s\n\n🔗 Link tải trực tiếp (File >50MB hoặc lỗi upload):\n%s", caption, mp4URL)
+		msgText = fmt.Sprintf("%s\n\n🔗 Direct download link (File >50MB or upload error):\n%s", caption, mp4URL)
 	}
 
 	msg := tgbotapi.NewMessage(chatID, msgText)
 	_, err := bot.Send(msg)
 	if err != nil {
-		log.Printf("x Lỗi gửi tin nhắn fallback: %v\n", err)
+		log.Printf("x Error sending fallback message: %v\n", err)
 	} else {
-		fmt.Println("✓ Đã gửi tin nhắn link dự phòng thành công!")
+		fmt.Println("✓ Fallback link message sent successfully!")
 	}
 }

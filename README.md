@@ -1,152 +1,140 @@
+Here's the English translation of the Video Downloader (Go) documentation:
+
+---
+
 # Video Downloader (Go)
 
-Hệ thống tải video TikTok & Facebook Reel tự động viết bằng Go, sử dụng **go-rod** để cào dữ liệu và hỗ trợ 2 chế độ: tải hàng loạt từ file `input.txt` hoặc tự động bắt link từ **Telegram Channel / Group / Bot**.
+An automated TikTok & Facebook Reel video downloader system written in Go, using **go-rod** for web scraping with support for 2 modes: batch downloading from `input.txt` file or automatic link detection from **Telegram Channel / Group / Bot**.
 
 ---
 
-## 📌 Tính năng chính
+## 📌 Key Features
 
-* 🚀 **Tải video không watermark**: Tự động bắt luồng MP4 từ giao diện web (TikTok + Facebook Reel/Video).
-* 📁 **Tải theo danh sách (File Mode)**: Đọc danh sách link từ file `input.txt`, hỗ trợ bỏ qua link đã tải và tự động ghi log các link lỗi.
-* 🤖 **Tự động hóa qua Telegram (Telegram Mode)**:
-* Lắng nghe tin nhắn/bài viết mới từ Telegram Channel, Group hoặc chat riêng.
-* Tự động tải video và phản hồi trạng thái xử lý trực tiếp về Telegram.
-
-
-* 🔄 **Cơ chế Retry & Skip**: Tự động thử lại khi tải thất bại, bỏ qua các file MP4 đã tải hoàn chỉnh để tiết kiệm băng thông.
+* 🚀 **Download watermark-free videos**: Automatically captures MP4 streams from web interfaces (TikTok + Facebook Reel/Video).
+* 📁 **Batch download from list (File Mode)**: Reads a list of links from `input.txt`, skips already downloaded links, and automatically logs failed links.
+* 🤖 **Automation via Telegram (Telegram Mode)**:
+  * Listens to new messages/posts from Telegram Channels, Groups, or private chats.
+  * Automatically downloads videos and replies with processing status directly to Telegram.
+* 🔄 **Retry & Skip mechanism**: Automatically retries on download failure, skips already completed MP4 files to save bandwidth.
 
 ---
 
-## 🛠 Yêu cầu hệ thống
+## 🛠 System Requirements
 
-* **Go**: Phiên bản `1.18` trở lên.
-* **Trình duyệt Web**: Google Chrome hoặc Chromium (Go-Rod sẽ tự động tải phiên bản Chromium phù hợp nếu chưa có).
+* **Go**: Version `1.18` or higher.
+* **Web Browser**: Google Chrome or Chromium (Go-Rod will automatically download a compatible Chromium version if not present).
 
 ---
 
-## 📥 Cài đặt
+## 📥 Installation
 
-1. **Clone dự án hoặc tải mã nguồn về máy:**
+1. **Clone the project or download the source code:**
 ```bash
 git clone https://github.com/your-username/tiktok-downloader.git
 cd tiktok-downloader
-
 ```
 
-
-2. **Cài đặt các thư viện phụ thuộc (Dependencies):**
+2. **Install dependencies:**
 ```bash
 go mod tidy
-
 ```
-
-
 
 ---
 
-## 🚀 Hướng dẫn sử dụng
+## 🚀 Usage Guide
 
-### Chế độ 1: Tải hàng loạt từ file (`input.txt`)
+### Mode 1: Batch download from file (`input.txt`)
 
-1. Tạo hoặc chỉnh sửa file `input.txt` trong thư mục gốc. Nhập danh sách URL TikTok hoặc Facebook (mỗi link 1 dòng, dùng `#` ở đầu dòng để bỏ qua):
+1. Create or edit the `input.txt` file in the root directory. Enter the list of TikTok or Facebook URLs (one link per line, use `#` at the beginning of a line to skip):
 ```text
-# Danh sách link TikTok
+# List of TikTok links
 https://www.tiktok.com/@user/video/1234567890
 https://vt.tiktok.com/ZSxxxxxx/
 
-# Danh sách link Facebook Reel/Video
+# List of Facebook Reel/Video links
 https://www.facebook.com/share/v/xxxxxxxx/
 https://www.facebook.com/reel/1234567890
 https://fb.watch/xxxxxxx/
-
 ```
 
-
-2. Chạy chương trình:
+2. Run the program:
 ```bash
 go run . -mode=file -file=input.txt
-
 ```
-
-
 
 ---
 
-### Chế độ 2: Tự động tải qua Telegram Bot
+### Mode 2: Automatic download via Telegram Bot
 
-1. **Tạo Telegram Bot**:
-* Nhắn tin cho [@BotFather](https://t.me/BotFather) trên Telegram để tạo Bot mới và lấy **API Token**.
-* Thêm Bot vào **Channel / Group** của bạn và cấp quyền **Administrator** (để Bot đọc được bài viết).
+1. **Create a Telegram Bot**:
+   * Message [@BotFather](https://t.me/BotFather) on Telegram to create a new Bot and get the **API Token**.
+   * Add the Bot to your **Channel / Group** and grant **Administrator** permissions (so the Bot can read posts).
 
-
-2. **Khởi chạy Bot**:
+2. **Launch the Bot**:
 ```bash
 go run . -mode=telegram -token="YOUR_TELEGRAM_BOT_TOKEN"
-
 ```
 
-
-3. **Sử dụng**:
-* Đăng bài viết chứa link TikTok vào Channel hoặc gửi trực tiếp link cho Bot.
-* Bot sẽ tự động nhận diện URL, tiến hành tải và báo kết quả lại Telegram.
-
-
+3. **Usage**:
+   * Post content containing TikTok/Facebook links in the Channel or send links directly to the Bot.
+   * The Bot will automatically detect the URL, proceed with downloading, and report results back to Telegram.
 
 ---
 
-## 🏗 Biên dịch thành file thực thi (Binary)
+## 🏗 Compile to Binary Executable
 
-Nếu muốn đóng gói chương trình thành file chạy trực tiếp mà không cần cài đặt Go trên máy khác:
+To package the program into a standalone executable without needing Go installed on other machines:
 
 ```bash
-# Biên dịch
+# Compile
 go build -o tiktok-downloader .
 
-# Chạy Chế độ File
+# Run File Mode
 ./tiktok-downloader -mode=file -file=input.txt
 
-# Chạy Chế độ Telegram
+# Run Telegram Mode
 ./tiktok-downloader -mode=telegram -token="YOUR_TELEGRAM_BOT_TOKEN"
-
 ```
 
 ---
 
-## ⚙️ Bảng tham số (Command Flags)
+## ⚙️ Command Flags
 
-| Tham số | Mặc định | Mô tả |
+| Flag | Default | Description |
 | --- | --- | --- |
-| `-mode` | `file` | Chế độ hoạt động: `file` hoặc `telegram` |
-| `-file` | `input.txt` | Đường dẫn tới file chứa danh sách URL (Chỉ dùng khi `-mode=file`) |
-| `-token` | `""` | Bot Token do Telegram cấp (Bắt buộc khi `-mode=telegram`) |
+| `-mode` | `file` | Operation mode: `file` or `telegram` |
+| `-file` | `input.txt` | Path to the file containing the URL list (Only used when `-mode=file`) |
+| `-token` | `""` | Bot Token provided by Telegram (Required when `-mode=telegram`) |
 
 ---
 
-## 📂 Cấu trúc dự án
+## 📂 Project Structure
 
 ```text
 .
-├── main.go         # Luồng điều khiển chính, xử lý tham số dòng lệnh
-├── telegram.go     # Xử lý kết nối và sự kiện từ Telegram Bot API
-├── scraper.go      # Tương tác trình duyệt (Go-Rod), lấy URL MP4 và thông tin video TikTok
-├── facebook.go     # Lấy URL MP4 và thông tin video Facebook Reel/Video
-├── downloader.go   # Tải file MP4, kiểm tra tính hợp lệ của file
-├── utils.go        # Hàm bổ trợ (slugify tiêu đề, tạo đường dẫn, nhận diện platform...)
-├── types.go        # Khai báo kiểu dữ liệu và hằng số
-├── config.go       # Cấu hình danh sách từ khóa loại trừ, thư mục xuất file
-└── input.txt       # File chứa danh sách link TikTok + Facebook cần tải
-
+├── main.go         # Main control flow, command-line argument handling
+├── telegram.go     # Connection and event handling from Telegram Bot API
+├── scraper.go      # Browser interaction (Go-Rod), fetching MP4 URLs and TikTok video info
+├── facebook.go     # Fetching MP4 URLs and Facebook Reel/Video info
+├── downloader.go   # Download MP4 files, validate file integrity
+├── utils.go        # Helper functions (slugify titles, path generation, platform detection...)
+├── types.go        # Data type declarations and constants
+├── config.go       # Configuration for exclusion keywords, output directory
+└── input.txt       # File containing list of TikTok + Facebook links to download
 ```
 
 ---
 
-## ❓ Sửa lỗi thường gặp (Troubleshooting)
+## ❓ Troubleshooting
 
-* **Lỗi `undefined: ...` khi chạy `go run main.go`:**
-* *Nguyên nhân:* Dự án gồm nhiều file Go trong cùng package `main`.
-* *Khắc phục:* Luôn dùng lệnh `go run .` thay vì chỉ định tên 1 file.
+* **Error `undefined: ...` when running `go run main.go`:**
+  * *Cause:* The project consists of multiple Go files in the same `main` package.
+  * *Solution:* Always use `go run .` instead of specifying a single file name.
 
+* **Stuck on Captcha screen / Cannot fetch video link:**
+  * *Cause:* TikTok detects automated activity.
+  * *Solution:* Switch `Headless(false)` in `main.go` to open the browser interface visually for inspection.
 
-* **Kẹt ở màn hình Captcha / Không bắt được link video:**
-* *Nguyên nhân:* TikTok phát hiện thao tác tự động.
-* *Khắc phục:* Chuyển `Headless(false)` trong `main.go` để mở giao diện trình duyệt trực quan và kiểm tra.
+---
+
+Let me know if you'd like any adjustments to the translation!
