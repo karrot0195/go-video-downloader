@@ -96,7 +96,7 @@ func getVideoInfoFromTikTok(browser *rod.Browser, tiktokURL string) *VideoInfo {
 }
 
 // processTikTokURLWithFile returns file path, video info, and result status
-func processTikTokURLWithFile(browser *rod.Browser, tiktokURL string, index, total int, watermarkName string) (string, *VideoInfo, ProcessResult) {
+func processTikTokURLWithFile(browser *rod.Browser, tiktokURL string, index, total int, watermarkName string, hasRemoveOldWatermark bool) (string, *VideoInfo, ProcessResult) {
 	fmt.Println("\n" + strings.Repeat("=", 50))
 	fmt.Printf("[%d/%d] Processing: %s\n", index, total, tiktokURL)
 	fmt.Println(strings.Repeat("=", 50))
@@ -135,7 +135,7 @@ func processTikTokURLWithFile(browser *rod.Browser, tiktokURL string, index, tot
 	success := downloadVideoWithRequests(info.MP4URL, info.Cookies, outputFile, 3)
 	if success {
 		fmt.Printf("--> Processing video (720p + crop + watermark)...\n")
-		if err := postProcessVideo(outputFile, watermarkName); err != nil {
+		if err := postProcessVideo(outputFile, watermarkName, hasRemoveOldWatermark); err != nil {
 			fmt.Printf("⚠️ Cannot process video: %v\n", err)
 			fmt.Println("   (Original file kept unchanged)")
 		} else {

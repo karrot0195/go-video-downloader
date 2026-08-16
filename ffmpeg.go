@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
+	"path/filepath"
 	"strings"
 )
 
@@ -21,7 +21,7 @@ type WatermarkInfo struct {
 //  4. Add "Chuyen Co Huong" watermark in top-left corner
 //
 // Result overwrites the input file.
-func postProcessVideo(input string, watermarkName string) error {
+func postProcessVideo(input string, watermarkName string, hasRemoveOldWatermark bool) error {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		return fmt.Errorf("ffmpeg not installed: %v", err)
 	}
@@ -33,16 +33,24 @@ func postProcessVideo(input string, watermarkName string) error {
 
 	tmp := input + ".tmp.mp4"
 
-	// Step 1: Create sample image from watermark if present
-	watermarkImg := "watermark_sample.png"
-	hasWatermark := extractWatermarkSample(input, watermarkImg)
+	// step 1: remove watermark with AI cleaner (best-effort)
+	cleanedInput := input
+
+	if hasRemoveOldWatermark {
+		if cleaned, err := removeWatermarkWithPython(input); err != nil {
+			fmt.Printf("⚠️ Watermark removal skipped: %v\n", err)
+		} else {
+			cleanedInput = cleaned
+			defer os.Remove(cleaned)
+		}
+	}
 
 	// Step 2: Build filter chain
-	filter := buildFilterChain(input, fontFile, hasWatermark, watermarkName, watermarkImg)
+	filter := buildFilterChain(cleanedInput, fontFile, watermarkName)
 
 	args := []string{
 		"-hide_banner", "-loglevel", "error", "-y",
-		"-i", input,
+		"-i", cleanedInput,
 		"-vf", filter,
 		"-c:v", "libx264",
 		"-preset", "veryfast",
@@ -64,115 +72,73 @@ func postProcessVideo(input string, watermarkName string) error {
 		return fmt.Errorf("cannot replace original file: %v", err)
 	}
 
-	// Clean up temporary files
-	os.Remove(watermarkImg)
 	return nil
 }
 
-// extractWatermarkSample extracts a watermark sample from the video
-func extractWatermarkSample(input, output string) bool {
-	// Extract first frame
-	frameFile := "first_frame.png"
-	defer os.Remove(frameFile)
+// findWatermarkCleanerScript locates libs/sorawatermarkcleaner/main.py,
+// checking relative to the executable first, then the working directory.
+func findWatermarkCleanerScript() string {
+	rel := filepath.Join("libs", "sorawatermarkcleaner", "main.py")
 
-	cmd := exec.Command("ffmpeg",
-		"-hide_banner", "-loglevel", "error",
-		"-i", input,
-		"-ss", "00:00:00",
-		"-vframes", "1",
-		frameFile,
-	)
-	if err := cmd.Run(); err != nil {
-		return false
+	if exe, err := os.Executable(); err == nil {
+		p := filepath.Join(filepath.Dir(exe), rel)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
 	}
-
-	// Assume watermark is in top-left corner within 200x80px area
-	// Use ffmpeg to crop and save as sample
-	cmd = exec.Command("ffmpeg",
-		"-hide_banner", "-loglevel", "error",
-		"-i", frameFile,
-		"-vf", "crop=300:80:10:10", // Top-left corner area
-		"-vframes", "1",
-		output,
-	)
-	if err := cmd.Run(); err != nil {
-		return false
+	if _, err := os.Stat(rel); err == nil {
+		return rel
 	}
-
-	// Check if file exists and is not empty
-	info, err := os.Stat(output)
-	if err != nil || info.Size() == 0 {
-		return false
-	}
-
-	return true
+	return ""
 }
 
-// detectWatermark finds watermark position in video
-func detectWatermark(input, sampleImg string) *WatermarkInfo {
-	// Create log file
-	logFile := "watermark_log.csv"
-	defer os.Remove(logFile)
-
-	// Use find_rect to locate watermark position
-	cmd := exec.Command("ffprobe",
-		"-hide_banner", "-loglevel", "error",
-		"-f", "lavfi",
-		fmt.Sprintf("movie=%s,find_rect=object=%s:threshold=0.3", input, sampleImg),
-		"-show_entries", "frame=tags:frame_tags=lavfi.rect.x,lavfi.rect.y,lavfi.rect.w,lavfi.rect.h",
-		"-of", "csv",
-	)
-
-	output, err := cmd.Output()
-	if err != nil {
-		return &WatermarkInfo{Found: false}
+// removeWatermarkWithPython runs libs/sorawatermarkcleaner/main.py to remove
+// the source watermark from the video. The script writes its result as
+// "{stem}-v2{ext}" next to the input; that cleaned path is returned.
+func removeWatermarkWithPython(input string) (string, error) {
+	script := findWatermarkCleanerScript()
+	if script == "" {
+		return "", fmt.Errorf("watermark cleaner script not found (libs/sorawatermarkcleaner/main.py)")
 	}
 
-	// Parse CSV output
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		parts := strings.Split(line, ",")
-		if len(parts) >= 5 {
-			// Find tags containing coordinates
-			for _, part := range parts {
-				if strings.Contains(part, "lavfi.rect.x=") {
-					x, _ := strconv.Atoi(strings.TrimPrefix(part, "lavfi.rect.x="))
-					y, _ := strconv.Atoi(strings.TrimPrefix(parts[2], "lavfi.rect.y="))
-					w, _ := strconv.Atoi(strings.TrimPrefix(parts[3], "lavfi.rect.w="))
-					h, _ := strconv.Atoi(strings.TrimPrefix(parts[4], "lavfi.rect.h="))
-
-					return &WatermarkInfo{
-						X: x, Y: y, W: w, H: h,
-						Found: true,
-					}
-				}
+	// Prefer the project's virtualenv (has numpy/torch installed),
+	// fall back to python3/python in PATH.
+	pythonBin := filepath.Join(filepath.Dir(script), ".venv", "bin", "python")
+	if _, err := os.Stat(pythonBin); err != nil {
+		pythonBin = "python3"
+		if _, err := exec.LookPath(pythonBin); err != nil {
+			pythonBin = "python"
+			if _, err := exec.LookPath(pythonBin); err != nil {
+				return "", fmt.Errorf("no python interpreter found (tried venv, python3, python)")
 			}
 		}
 	}
 
-	return &WatermarkInfo{Found: false}
+	ext := filepath.Ext(input)
+	cleaned := strings.TrimSuffix(input, ext) + "-v2" + ext
+
+	fmt.Println("--> Removing watermark with AI cleaner (may take a few minutes)...")
+	cmd := exec.Command(pythonBin, script, input)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	// Only run YOLO detection on every 5th frame; skipped frames are
+	// interpolated by the cleaner's interval logic (much faster).
+	cmd.Env = append(os.Environ(), "SORA_DETECT_EVERY_N_FRAMES=5")
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("watermark cleaner failed: %v", err)
+	}
+	if _, err := os.Stat(cleaned); err != nil {
+		return "", fmt.Errorf("watermark cleaner finished but output not found: %s", cleaned)
+	}
+	return cleaned, nil
 }
 
 // buildFilterChain builds ffmpeg filter chain
-func buildFilterChain(input, fontFile string, hasWatermark bool, watermarkName string, watermarkImg string) string {
+func buildFilterChain(input, fontFile string, watermarkName string) string {
 	var filters []string
 
 	// 1. Crop 1px from each edge
 	filters = append(filters, "crop=iw-2:ih-2")
-
-	// 2. Remove old watermark if present
-	if hasWatermark {
-		info := detectWatermark(input, watermarkImg)
-		if info.Found {
-			// Use delogo to remove watermark
-			delogoFilter := fmt.Sprintf("delogo=x=%d:y=%d:w=%d:h=%d:show=0",
-				info.X, info.Y, info.W, info.H)
-			filters = append(filters, delogoFilter)
-		}
-	}
 
 	// 3. Scale to 720p
 	scaleFilter := "scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)'"

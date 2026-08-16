@@ -17,6 +17,7 @@ func main() {
 	inputFile := flag.String("file", "input.txt", "URL list file")
 	botTokenFlag := flag.String("token", "", "Telegram Bot Token")
 	watermarkName := flag.String("watermark", "Chuyen Co Huong", "Watermark name")
+	hasRemoveOldWatermark := flag.Bool("remove-old-watermark", false, "Remove old watermark from video")
 	flag.Parse()
 
 	// Initialize directories and load processed history
@@ -55,15 +56,15 @@ func main() {
 			fmt.Println("x Error: Bot Token required via -token flag or TELEGRAM_BOT_TOKEN environment variable")
 			return
 		}
-		StartTelegramBot(browser, bot, *watermarkName)
+		StartTelegramBot(browser, bot, *watermarkName, *hasRemoveOldWatermark)
 		return
 	}
 
 	// File mode execution
-	runFileMode(browser, bot, *inputFile, *watermarkName)
+	runFileMode(browser, bot, *inputFile, *watermarkName, *hasRemoveOldWatermark)
 }
 
-func runFileMode(browser *rod.Browser, bot *tgbotapi.BotAPI, inputFile string, watermarkName string) {
+func runFileMode(browser *rod.Browser, bot *tgbotapi.BotAPI, inputFile string, watermarkName string, hasRemoveOldWatermark bool) {
 	file, err := os.Open(inputFile)
 	if err != nil {
 		fmt.Printf("x File not found: %s\n", inputFile)
@@ -86,9 +87,9 @@ func runFileMode(browser *rod.Browser, bot *tgbotapi.BotAPI, inputFile string, w
 
 		// Detect platform and call appropriate scraper
 		if isFacebookURL(videoURL) {
-			outputFile, _, res = processFacebookURLWithFile(browser, videoURL, i+1, len(urls), watermarkName)
+			outputFile, _, res = processFacebookURLWithFile(browser, videoURL, i+1, len(urls), watermarkName, hasRemoveOldWatermark)
 		} else {
-			outputFile, _, res = processTikTokURLWithFile(browser, videoURL, i+1, len(urls), watermarkName)
+			outputFile, _, res = processTikTokURLWithFile(browser, videoURL, i+1, len(urls), watermarkName, hasRemoveOldWatermark)
 		}
 
 		// If download successful and Telegram bot exists -> Send file (if needed)

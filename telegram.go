@@ -9,7 +9,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func StartTelegramBot(browser *rod.Browser, bot *tgbotapi.BotAPI, watermarkName string) {
+func StartTelegramBot(browser *rod.Browser, bot *tgbotapi.BotAPI, watermarkName string, hasRemoveOldWatermark bool) {
 	fmt.Printf("✓ Connected to Telegram Bot: @%s\n", bot.Self.UserName)
 	fmt.Println("--> Scanning for new messages ...")
 
@@ -45,9 +45,9 @@ func StartTelegramBot(browser *rod.Browser, bot *tgbotapi.BotAPI, watermarkName 
 
 			// Detect platform and call appropriate scraper
 			if isFacebookURL(videoURL) {
-				outputFile, _, res = processFacebookURLWithFile(browser, videoURL, i+1, len(urls), watermarkName)
+				outputFile, _, res = processFacebookURLWithFile(browser, videoURL, i+1, len(urls), watermarkName, hasRemoveOldWatermark)
 			} else {
-				outputFile, _, res = processTikTokURLWithFile(browser, videoURL, i+1, len(urls), watermarkName)
+				outputFile, _, res = processTikTokURLWithFile(browser, videoURL, i+1, len(urls), watermarkName, hasRemoveOldWatermark)
 			}
 
 			if res == ResultSuccess || res == ResultSkipped {

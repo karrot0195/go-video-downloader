@@ -296,7 +296,7 @@ func getVideoInfoFromFacebook(browser *rod.Browser, fbURL string) *VideoInfo {
 }
 
 // processFacebookURLWithFile processes 1 Facebook URL: get video link -> download -> post-processing
-func processFacebookURLWithFile(browser *rod.Browser, fbURL string, index, total int, watermarkName string) (string, *VideoInfo, ProcessResult) {
+func processFacebookURLWithFile(browser *rod.Browser, fbURL string, index, total int, watermarkName string, hasRemoveOldWatermark bool) (string, *VideoInfo, ProcessResult) {
 	fmt.Println("\n" + strings.Repeat("=", 50))
 	fmt.Printf("[%d/%d] Processing: %s\n", index, total, fbURL)
 	fmt.Println(strings.Repeat("=", 50))
@@ -325,7 +325,7 @@ func processFacebookURLWithFile(browser *rod.Browser, fbURL string, index, total
 	success := downloadVideo(info.MP4URL, info.Cookies, outputFile, 3, "https://www.facebook.com/")
 	if success {
 		fmt.Printf("--> Processing video (720p + crop + watermark)...\n")
-		if err := postProcessVideo(outputFile, watermarkName); err != nil {
+		if err := postProcessVideo(outputFile, watermarkName, hasRemoveOldWatermark); err != nil {
 			fmt.Printf("⚠️ Cannot process video: %v\n", err)
 			fmt.Println("   (Original file kept unchanged)")
 		} else {
